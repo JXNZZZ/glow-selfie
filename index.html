@@ -4,208 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0a0c">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Glow">
 <title>Glow Selfie</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0b0a0c;
-    --ink:#ffffff;
-    --ink-dim:rgba(255,255,255,.72);
-    --glass:rgba(20,17,22,.42);
-    --glass-strong:rgba(20,17,22,.72);
-    --accent:#ffc861;
-    --light:#fff3e4;
-    --spread:40px;
-    --blur:140px;
-    --ringop:1;
-    color-scheme:dark;
-  }
+  :root{--bg:#0b0a0c;--ink:#fff;--ink-dim:rgba(255,255,255,.72);--chip:rgba(16,14,18,.55);--chip-strong:rgba(16,14,18,.82);--accent:#ffc861;--light:#fff3e4;color-scheme:dark}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
-  html,body{
-    margin:0;height:100%;background:var(--bg);color:var(--ink);
-    font-family:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     overflow:hidden;overscroll-behavior:none;touch-action:manipulation;
-    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
-  }
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
   button:focus-visible,.slider:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   svg{display:block}
 
-  .app{position:fixed;inset:0;overflow:hidden}
-  .stage{position:absolute;inset:0}
+  .app{position:fixed;inset:0;overflow:hidden;contain:strict}
   video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
   video.mirror{transform:scaleX(-1)}
 
-  /* The edge light: stacked inset shadows = solid band at the edge fading smoothly inward */
-  .ring{
-    position:absolute;inset:0;pointer-events:none;z-index:2;
-    opacity:var(--ringop);
-    box-shadow:
-      inset 0 0 var(--blur) var(--spread) var(--light),
-      inset 0 0 calc(var(--blur) * .4) calc(var(--spread) * .6) var(--light);
-    transition:opacity .3s ease, box-shadow .35s ease;
-  }
-  .ring.dragging{transition:none}
-  .wash{position:absolute;inset:0;background:var(--light);opacity:0;pointer-events:none;z-index:3;transition:opacity .12s ease}
-  .wash.on{opacity:1}
-  .blink{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:9}
-  .blink.go{animation:blink .28s ease-out}
-  @keyframes blink{0%{opacity:.85}100%{opacity:0}}
+  /* Edge light: a small pre-rendered gradient, scaled up by the GPU. Nothing is re-drawn per camera frame. */
+  #glow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;will-change:opacity;transition:opacity .2s linear}
+  #glow.off{opacity:0}
 
-  /* Right-hand tool rail */
-  .rail{
-    position:absolute;z-index:6;right:14px;
-    top:calc(env(safe-area-inset-top,0px) + 14px);
-    display:flex;flex-direction:column;align-items:center;gap:12px;
-  }
-  .tool{
-    width:46px;height:46px;border-radius:50%;
-    display:grid;place-items:center;position:relative;
-    background:var(--glass);
-    -webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);
-    box-shadow:0 2px 10px rgba(0,0,0,.25);
-    transition:transform .15s ease, background .2s ease;
-  }
+  .rail{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);
+    display:flex;flex-direction:column;align-items:center;gap:12px}
+  .tool{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--chip)}
   .tool:active{transform:scale(.9)}
   .tool svg{width:24px;height:24px}
   .tool.lit{background:var(--accent);color:#231a08}
-  .badge{
-    position:absolute;right:-4px;bottom:-4px;
-    font-size:9px;font-weight:800;letter-spacing:.06em;
-    background:#fff;color:#231a08;border-radius:6px;padding:2px 4px;line-height:1;
-  }
-  .tone-dot{width:22px;height:22px;border-radius:50%;background:var(--light);box-shadow:0 0 0 2px rgba(255,255,255,.9), 0 0 12px var(--light)}
+  .tone-dot{width:22px;height:22px;border-radius:50%;background:var(--light);box-shadow:0 0 0 2px #fff}
   .timer-txt{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
 
-  /* Vertical brightness slider */
-  .slider{
-    width:46px;height:190px;border-radius:23px;margin-top:4px;
-    background:var(--glass);
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-    display:flex;flex-direction:column;align-items:center;padding:12px 0 10px;gap:8px;
-    touch-action:none;cursor:ns-resize;
-    transition:opacity .25s ease, transform .25s ease;
-  }
-  .slider[hidden]{display:none!important}
+  .slider{width:46px;height:190px;border-radius:23px;margin-top:4px;background:var(--chip);
+    display:flex;flex-direction:column;align-items:center;padding:12px 0 10px;gap:8px;touch-action:none}
   .slider svg{width:18px;height:18px;flex:none;color:var(--accent)}
-  .track{position:relative;flex:1;width:6px;border-radius:3px;background:rgba(255,255,255,.28)}
-  .fill{position:absolute;left:0;right:0;bottom:0;border-radius:3px;background:linear-gradient(to top, #fff 0%, var(--accent) 100%)}
-  .knob{
-    position:absolute;left:50%;width:22px;height:22px;border-radius:50%;
-    background:#fff;transform:translate(-50%,50%);
-    box-shadow:0 1px 6px rgba(0,0,0,.35);
-  }
-  .val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .track{position:relative;flex:1;width:6px;border-radius:3px;background:rgba(255,255,255,.3)}
+  .fill{position:absolute;left:0;right:0;bottom:0;height:100%;border-radius:3px;background:#fff;transform-origin:bottom;will-change:transform}
+  .knob{position:absolute;left:50%;bottom:0;width:22px;height:22px;margin-left:-11px;margin-bottom:-11px;border-radius:50%;background:#fff;will-change:transform}
+  .val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
 
-  /* Bottom controls */
-  .bottom{
-    position:absolute;z-index:6;left:0;right:0;bottom:0;
-    padding:0 28px calc(env(safe-area-inset-bottom,0px) + 28px);
-    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
-  }
-  .thumb{
-    justify-self:start;width:50px;height:50px;border-radius:14px;overflow:hidden;
-    background:var(--glass);border:2px solid rgba(255,255,255,.85);
-    box-shadow:0 2px 10px rgba(0,0,0,.3);
-  }
-  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
-  .thumb[hidden]{display:block!important;visibility:hidden}
-  .shutter{
-    width:84px;height:84px;border-radius:50%;
-    border:6px solid #fff;background:rgba(255,255,255,.12);
-    box-shadow:0 0 0 1px rgba(0,0,0,.15), 0 4px 18px rgba(0,0,0,.3);
-    transition:transform .12s ease, background .2s ease;
-  }
-  .shutter:active{transform:scale(.9);background:rgba(255,255,255,.4)}
-  .shutter:disabled{opacity:.6}
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:0 28px calc(env(safe-area-inset-bottom,0px) + 28px);
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+  .thumb{justify-self:start;width:50px;height:50px;border-radius:14px;overflow:hidden;background:var(--chip);border:2px solid rgba(255,255,255,.9)}
+  .thumb.empty{visibility:hidden}
+  .thumb canvas{width:100%;height:100%;display:block;object-fit:cover}
+  .shutter{width:84px;height:84px;border-radius:50%;border:6px solid #fff;background:rgba(255,255,255,.12);transition:transform .1s ease}
+  .shutter:active,.shutter.snap{transform:scale(.86)}
 
-  .count{
-    position:absolute;inset:0;z-index:7;display:grid;place-items:center;pointer-events:none;
-    font-size:min(40vw,220px);font-weight:800;color:#fff;
-    text-shadow:0 4px 40px rgba(0,0,0,.45);
-  }
-  .count span{animation:pop 1s ease-out}
-  @keyframes pop{0%{transform:scale(1.4);opacity:0}20%{transform:scale(1);opacity:1}100%{opacity:.9}}
+  .count{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+    font-size:min(40vw,220px);font-weight:800;text-shadow:0 2px 16px rgba(0,0,0,.5)}
 
-  .toast{
-    position:absolute;z-index:20;left:50%;
-    top:calc(env(safe-area-inset-top,0px) + 22px);
-    transform:translateX(-50%) translateY(-8px);
-    max-width:calc(100% - 140px);
-    background:var(--glass-strong);
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  .toast{position:absolute;z-index:20;left:50%;top:calc(env(safe-area-inset-top,0px) + 22px);
+    transform:translateX(-50%);max-width:calc(100% - 140px);background:var(--chip-strong);
     padding:9px 14px;border-radius:14px;font-size:14px;font-weight:600;text-align:center;
-    opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;
-  }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    opacity:0;pointer-events:none;transition:opacity .2s linear}
+  .toast.show{opacity:1}
 
-  /* Photo preview */
-  .preview{position:absolute;inset:0;z-index:15;background:#000;display:flex;flex-direction:column}
-  .preview img{flex:1;min-height:0;width:100%;object-fit:contain}
-  .pbar{
-    display:flex;gap:12px;justify-content:center;
-    padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 20px);
-    background:linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,0));
-    position:absolute;left:0;right:0;bottom:0;
-  }
-  .pill{
-    display:inline-flex;align-items:center;gap:8px;
-    height:50px;padding:0 24px;border-radius:25px;font-weight:700;font-size:16px;
-    background:var(--glass-strong);color:#fff;
-    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-  }
+  .preview{position:absolute;inset:0;z-index:15;background:#000}
+  .preview canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .pbar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:12px;justify-content:center;
+    padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 20px)}
+  .pill{display:inline-flex;align-items:center;gap:8px;height:50px;padding:0 24px;border-radius:25px;
+    font-weight:700;font-size:16px;background:var(--chip-strong)}
   .pill svg{width:20px;height:20px}
   .pill.primary{background:var(--accent);color:#231a08}
   .pill:active{transform:scale(.96)}
 
-  /* Camera permission / error panel */
-  .panel{
-    position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;
-    padding:32px 24px;gap:14px;
-    background:radial-gradient(120% 80% at 50% 0%, #2a2129 0%, var(--bg) 60%);
-  }
-  .panel[hidden]{display:none!important}
-  .panel h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+  .panel{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;justify-content:center;
+    padding:32px 24px;gap:14px;background:var(--bg)}
+  .panel h1{margin:0;font-size:30px;font-weight:800;text-wrap:balance}
   .panel p{margin:0;color:var(--ink-dim);font-size:16px;line-height:1.5;max-width:34ch}
   .panel .pill{align-self:flex-start;margin-top:8px}
-  .glowmark{
-    width:84px;height:84px;border-radius:26px;margin-bottom:10px;
-    background:#000;box-shadow:inset 0 0 22px 8px #fff3e4, 0 0 40px rgba(255,200,120,.35);
-  }
+  .glowmark{width:84px;height:84px;border-radius:26px;margin-bottom:10px;background:#000;box-shadow:inset 0 0 22px 8px #fff3e4}
 
-  @media (prefers-reduced-motion: reduce){
-    *{animation:none!important;transition:none!important}
-  }
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<div class="app" id="app">
-  <div class="stage" id="stage">
-    <video id="cam" class="mirror" autoplay playsinline muted></video>
-  </div>
-  <div class="ring" id="ring"></div>
-  <div class="wash" id="wash"></div>
+<div class="app">
+  <video id="cam" class="mirror" autoplay playsinline muted disablepictureinpicture></video>
+  <canvas id="glow"></canvas>
 
   <div class="rail">
     <button class="tool" id="flipBtn" aria-label="Switch camera">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>
     </button>
-    <button class="tool lit" id="lightBtn" aria-label="Edge light">
+    <button class="tool lit" id="lightBtn" aria-label="Edge light on" aria-pressed="true">
       <svg id="boltOn" viewBox="0 0 24 24" fill="currentColor"><path d="M13.2 2 4.5 13.4h6.3L9.9 22l8.6-11.6h-6.2z"/></svg>
       <svg id="boltOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="M13 2 7.8 9M12.6 13.4H4.5l2.3-3M16 12.4 9.9 22l.9-8.6M3 3l18 18"/></svg>
-      <span class="badge" id="maxBadge" hidden>MAX</span>
     </button>
-    <button class="tool" id="toneBtn" aria-label="Light colour">
-      <span class="tone-dot"></span>
-    </button>
-    <button class="tool" id="timerBtn" aria-label="Self timer">
+    <button class="tool" id="toneBtn" aria-label="Light colour"><span class="tone-dot"></span></button>
+    <button class="tool" id="timerBtn" aria-label="Self timer off">
       <svg id="timerIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>
       <span class="timer-txt" id="timerTxt" hidden></span>
     </button>
@@ -217,26 +109,19 @@
   </div>
 
   <div class="bottom">
-    <button class="thumb" id="thumb" aria-label="Open last photo" hidden><img id="thumbImg" alt=""></button>
+    <button class="thumb empty" id="thumb" aria-label="Open last photo"><canvas id="thumbCv"></canvas></button>
     <button class="shutter" id="shutter" aria-label="Take photo"></button>
     <span></span>
   </div>
 
   <div class="count" id="count" hidden></div>
-  <div class="blink" id="blink"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <div class="preview" id="preview" hidden>
-    <img id="shot" alt="Your selfie">
+    <canvas id="shot" aria-label="Your selfie" role="img"></canvas>
     <div class="pbar">
-      <button class="pill" id="retake">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-        Retake
-      </button>
-      <button class="pill primary" id="save">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        Save
-      </button>
+      <button class="pill" id="retake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>Retake</button>
+      <button class="pill primary" id="save"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Save</button>
     </div>
   </div>
 
@@ -250,253 +135,225 @@
 
 <script>
 (() => {
-  const $ = s => document.querySelector(s);
-  const root = document.documentElement;
-  const video = $('#cam'), ring = $('#ring'), wash = $('#wash');
+  const $ = s => document.getElementById(s);
+  const video = $('cam'), glow = $('glow'), gctx = glow.getContext('2d');
 
   const TONES = [
-    { name: 'Warm light', c: '#ffd29a' },
-    { name: 'Soft white', c: '#fff3e4' },
-    { name: 'Cool light', c: '#e2edff' },
-    { name: 'Pink glow',  c: '#ffd6e6' },
+    { name: 'Warm light', rgb: [255, 210, 154] },
+    { name: 'Soft white', rgb: [255, 243, 228] },
+    { name: 'Cool light', rgb: [226, 237, 255] },
+    { name: 'Pink glow',  rgb: [255, 214, 230] },
   ];
   const TIMERS = [0, 3, 10];
-  // light modes: 0 = off, 1 = edge light, 2 = edge light + full-screen flash when you shoot
-  const MODE_LABEL = ['Light off', 'Edge light on', 'Edge light + max flash'];
+  const S = { on: true, level: 0.75, tone: 1, timer: 0, facing: 'user', stream: null, busy: false, shot: null };
 
-  const S = { mode: 1, level: 0.75, tone: 1, timer: 0, facing: 'user', stream: null, busy: false, last: null };
   try {
-    const p = JSON.parse(localStorage.getItem('glowselfie') || '{}');
-    if (p.mode != null) S.mode = p.mode;
-    if (p.level != null) S.level = p.level;
-    if (p.tone != null) S.tone = p.tone;
-    if (p.timer != null) S.timer = p.timer;
+    const p = JSON.parse(localStorage.getItem('glowselfie2') || '{}');
+    ['on', 'level', 'tone', 'timer'].forEach(k => { if (p[k] != null) S[k] = p[k]; });
   } catch (e) {}
-  const persist = () => {
-    try { localStorage.setItem('glowselfie', JSON.stringify({ mode: S.mode, level: S.level, tone: S.tone, timer: S.timer })); } catch (e) {}
-  };
+  const persist = () => { try { localStorage.setItem('glowselfie2', JSON.stringify({ on: S.on, level: S.level, tone: S.tone, timer: S.timer })); } catch (e) {} };
 
-  const wait = ms => new Promise(r => setTimeout(r, ms));
   let toastT;
-  function toast(msg, ms = 1600) {
-    const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  function toast(msg, ms = 1500) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
   }
 
-  /* ---------- Edge light ---------- */
-  function applyRing(boost = false) {
-    const m = Math.min(innerWidth, innerHeight);
-    const l = boost ? 1 : S.level;
-    const spread = m * (0.015 + 0.24 * l);   // solid band thickness
-    const blur = m * (0.10 + 0.40 * l);      // how far the gradient fades inward
-    root.style.setProperty('--spread', spread.toFixed(1) + 'px');
-    root.style.setProperty('--blur', blur.toFixed(1) + 'px');
-    root.style.setProperty('--light', TONES[S.tone].c);
-    root.style.setProperty('--ringop', S.mode ? (0.4 + 0.6 * l).toFixed(3) : '0');
+  /* ---------- Edge light ----------
+     Rendered at 1/4 screen resolution into a canvas, then stretched by the GPU.
+     The gradient is smooth, so the upscale is invisible, and it only redraws
+     when you change brightness, colour or rotate the phone. */
+  const SCALE = 0.25;
+  let img = null, gw = 0, gh = 0;
+  function drawGlow() {
+    const w = Math.max(2, Math.round(innerWidth * SCALE));
+    const h = Math.max(2, Math.round(innerHeight * SCALE));
+    if (w !== gw || h !== gh) { gw = glow.width = w; gh = glow.height = h; img = gctx.createImageData(w, h); }
+    const d = img.data, [r, g, b] = TONES[S.tone].rgb;
+    const l = S.level, m = Math.min(w, h);
+    const reach = m * (0.10 + 0.42 * l);     // how far the light spreads inward
+    const solid = reach * (0.18 + 0.22 * l); // fully bright band at the very edge
+    const fade = reach - solid;
+    const peak = 255 * (0.55 + 0.45 * l);
+    // falloff for a given distance from one edge
+    const fall = dist => {
+      if (dist <= solid) return 1;
+      if (dist >= reach) return 0;
+      const t = 1 - (dist - solid) / fade; return t * t * (3 - 2 * t);
+    };
+    // precompute per-column and per-row "darkness" (1 - light from left+right / top+bottom)
+    const colK = new Float32Array(w), rowK = new Float32Array(h);
+    for (let x = 0; x < w; x++) colK[x] = (1 - fall(x + 0.5)) * (1 - fall(w - x - 0.5));
+    for (let y = 0; y < h; y++) rowK[y] = (1 - fall(y + 0.5)) * (1 - fall(h - y - 0.5));
+    // light from all four edges combined like overlapping lamps: no seams, soft corners
+    let i = 0;
+    for (let y = 0; y < h; y++) {
+      const rk = rowK[y];
+      for (let x = 0; x < w; x++, i += 4) {
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = (1 - rk * colK[x]) * peak;
+      }
+    }
+    gctx.putImageData(img, 0, 0);
   }
+  let glowQueued = false;
+  const queueGlow = () => { if (!glowQueued) { glowQueued = true; requestAnimationFrame(() => { glowQueued = false; drawGlow(); }); } };
 
   function renderUI() {
-    const lb = $('#lightBtn');
-    lb.classList.toggle('lit', S.mode > 0);
-    $('#boltOn').hidden = S.mode === 0;
-    $('#boltOff').hidden = S.mode !== 0;
-    $('#maxBadge').hidden = S.mode !== 2;
-    lb.setAttribute('aria-label', MODE_LABEL[S.mode]);
-    $('#slider').hidden = S.mode === 0;
-    $('#toneBtn').hidden = S.mode === 0;
-    $('#toneBtn').setAttribute('aria-label', 'Light colour: ' + TONES[S.tone].name);
-
-    const pct = Math.round(S.level * 100);
-    $('#fill').style.height = pct + '%';
-    $('#knob').style.bottom = pct + '%';
-    $('#val').textContent = pct;
-    $('#slider').setAttribute('aria-valuenow', pct);
-
-    $('#timerIcon').hidden = S.timer !== 0;
-    $('#timerTxt').hidden = S.timer === 0;
-    $('#timerTxt').textContent = S.timer + 's';
-    $('#timerBtn').classList.toggle('lit', S.timer !== 0);
-    $('#timerBtn').setAttribute('aria-label', S.timer ? 'Self timer ' + S.timer + ' seconds' : 'Self timer off');
-
+    $('lightBtn').classList.toggle('lit', S.on);
+    $('lightBtn').setAttribute('aria-pressed', S.on);
+    $('lightBtn').setAttribute('aria-label', S.on ? 'Edge light on' : 'Edge light off');
+    $('boltOn').hidden = !S.on; $('boltOff').hidden = S.on;
+    $('slider').hidden = !S.on; $('toneBtn').hidden = !S.on;
+    glow.classList.toggle('off', !S.on);
+    document.documentElement.style.setProperty('--light', 'rgb(' + TONES[S.tone].rgb + ')');
+    $('toneBtn').setAttribute('aria-label', 'Light colour: ' + TONES[S.tone].name);
+    $('timerIcon').hidden = S.timer !== 0; $('timerTxt').hidden = S.timer === 0;
+    $('timerTxt').textContent = S.timer + 's';
+    $('timerBtn').classList.toggle('lit', S.timer !== 0);
+    $('timerBtn').setAttribute('aria-label', S.timer ? 'Self timer ' + S.timer + ' seconds' : 'Self timer off');
     video.classList.toggle('mirror', S.facing === 'user');
-    applyRing();
+    renderSlider();
   }
 
-  /* ---------- Brightness slider ---------- */
-  const slider = $('#slider'), track = $('#track');
-  function setFromY(y) {
-    const r = track.getBoundingClientRect();
-    S.level = Math.min(1, Math.max(0, 1 - (y - r.top) / r.height));
-    renderUI();
+  /* ---------- Brightness slider (transform-only updates) ---------- */
+  const slider = $('slider'), track = $('track');
+  let trackH = 0, trackTop = 0;
+  function renderSlider() {
+    const pct = Math.round(S.level * 100);
+    trackH = track.clientHeight || trackH;
+    $('fill').style.transform = 'scaleY(' + S.level + ')';
+    $('knob').style.transform = 'translateY(' + (-S.level * trackH) + 'px)';
+    $('val').textContent = pct;
+    slider.setAttribute('aria-valuenow', pct);
   }
+  function setLevel(v) { S.level = Math.min(1, Math.max(0, v)); renderSlider(); queueGlow(); }
   slider.addEventListener('pointerdown', e => {
     slider.setPointerCapture(e.pointerId);
-    ring.classList.add('dragging');
-    setFromY(e.clientY);
+    const r = track.getBoundingClientRect(); trackTop = r.top; trackH = r.height;
+    setLevel(1 - (e.clientY - trackTop) / trackH);
   });
-  slider.addEventListener('pointermove', e => { if (slider.hasPointerCapture(e.pointerId)) setFromY(e.clientY); });
-  const endDrag = () => { ring.classList.remove('dragging'); persist(); };
-  slider.addEventListener('pointerup', endDrag);
-  slider.addEventListener('pointercancel', endDrag);
+  slider.addEventListener('pointermove', e => {
+    if (slider.hasPointerCapture(e.pointerId)) setLevel(1 - (e.clientY - trackTop) / trackH);
+  });
+  slider.addEventListener('pointerup', persist);
+  slider.addEventListener('pointercancel', persist);
   slider.addEventListener('keydown', e => {
     const step = { ArrowUp: .05, ArrowRight: .05, ArrowDown: -.05, ArrowLeft: -.05, PageUp: .2, PageDown: -.2 }[e.key];
     if (step == null) return;
-    e.preventDefault();
-    S.level = Math.min(1, Math.max(0, S.level + step));
-    renderUI(); persist();
+    e.preventDefault(); setLevel(S.level + step); persist();
   });
 
   /* ---------- Tools ---------- */
-  $('#lightBtn').addEventListener('click', () => {
-    S.mode = (S.mode + 1) % 3; renderUI(); persist(); toast(MODE_LABEL[S.mode]);
-  });
-  $('#toneBtn').addEventListener('click', () => {
-    S.tone = (S.tone + 1) % TONES.length; renderUI(); persist(); toast(TONES[S.tone].name);
-  });
-  $('#timerBtn').addEventListener('click', () => {
+  $('lightBtn').addEventListener('click', () => { S.on = !S.on; renderUI(); persist(); toast(S.on ? 'Edge light on' : 'Edge light off'); });
+  $('toneBtn').addEventListener('click', () => { S.tone = (S.tone + 1) % TONES.length; renderUI(); queueGlow(); persist(); toast(TONES[S.tone].name); });
+  $('timerBtn').addEventListener('click', () => {
     S.timer = TIMERS[(TIMERS.indexOf(S.timer) + 1) % TIMERS.length];
     renderUI(); persist(); toast(S.timer ? S.timer + ' second timer' : 'Timer off');
   });
-  $('#flipBtn').addEventListener('click', flip);
-
-  // Double-tap the screen to flip, like Snapchat
+  $('flipBtn').addEventListener('click', flip);
   let lastTap = 0;
-  $('#stage').addEventListener('pointerup', () => {
-    const now = Date.now();
-    if (now - lastTap < 300) { flip(); lastTap = 0; } else lastTap = now;
-  });
-
-  async function flip() {
-    S.facing = S.facing === 'user' ? 'environment' : 'user';
-    await startCamera();
-  }
+  video.addEventListener('pointerup', () => { const n = Date.now(); if (n - lastTap < 300) { flip(); lastTap = 0; } else lastTap = n; });
+  function flip() { S.facing = S.facing === 'user' ? 'environment' : 'user'; startCamera(); }
 
   /* ---------- Camera ---------- */
   async function startCamera() {
-    const panel = $('#panel');
+    const panel = $('panel');
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      $('#panelTitle').textContent = 'Open this from a web link';
-      $('#panelMsg').textContent = 'Browsers don’t let a file opened from Downloads use the camera. Upload Glow Selfie to a host like GitHub Pages or Netlify, open that https link, then add it to your home screen.';
-      $('#retry').hidden = true;
-      panel.hidden = false;
-      return;
+      $('panelTitle').textContent = 'Open this from a web link';
+      $('panelMsg').textContent = 'Browsers don’t let a file opened from Downloads use the camera. Open the https link instead, then add it to your home screen.';
+      $('retry').hidden = true; panel.hidden = false; return;
     }
     if (S.stream) S.stream.getTracks().forEach(t => t.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: S.facing }, width: { ideal: 1920 }, height: { ideal: 1920 } }
+        video: { facingMode: { ideal: S.facing }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } }
       });
-      S.stream = stream;
-      video.srcObject = stream;
+      S.stream = stream; video.srcObject = stream;
       await video.play().catch(() => {});
-      panel.hidden = true;
-      renderUI();
-      keepAwake();
+      panel.hidden = true; renderUI(); keepAwake();
     } catch (err) {
       const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
-      $('#panelTitle').textContent = denied ? 'Camera access is blocked' : 'Couldn’t start the camera';
-      $('#panelMsg').textContent = denied
-        ? 'Allow camera access for this page in your browser settings, then tap Try again.'
+      $('panelTitle').textContent = denied ? 'Camera access is blocked' : 'Couldn’t start the camera';
+      $('panelMsg').textContent = denied
+        ? 'Tap the icon left of the address bar, allow Camera, then tap Try again.'
         : 'Another app might be using the camera. Close it and tap Try again.';
-      $('#retry').textContent = 'Try again';
-      $('#retry').hidden = false;
-      panel.hidden = false;
+      $('retry').textContent = 'Try again'; $('retry').hidden = false; panel.hidden = false;
     }
   }
-  $('#retry').addEventListener('click', startCamera);
+  $('retry').addEventListener('click', startCamera);
 
   let wakeLock = null;
   async function keepAwake() {
     try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => wakeLock = null); } } catch (e) {}
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      keepAwake();
-      const live = S.stream && S.stream.getVideoTracks().some(t => t.readyState === 'live');
-      if (!live) startCamera();
-    }
+    if (document.visibilityState === 'hidden') {
+      // release the camera in the background to save battery
+      if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+    } else { startCamera(); }
   });
 
-  /* ---------- Capture ---------- */
+  /* ---------- Capture: instant, no light change ---------- */
+  const shot = $('shot'), sctx = shot.getContext('2d');
   function grabFrame() {
-    const vw = video.videoWidth, vh = video.videoHeight;
-    const sw = innerWidth, sh = innerHeight;
-    // Crop to exactly what's on screen (object-fit: cover)
-    const scale = Math.max(sw / vw, sh / vh);
-    const cw = Math.round(sw / scale), ch = Math.round(sh / scale);
-    const sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
-    const canvas = document.createElement('canvas');
-    canvas.width = cw; canvas.height = ch;
-    const ctx = canvas.getContext('2d');
-    if (S.facing === 'user') { ctx.translate(cw, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-    return canvas;
+    const vw = video.videoWidth, vh = video.videoHeight, sw = innerWidth, sh = innerHeight;
+    const k = Math.max(sw / vw, sh / vh);               // crop to what's on screen
+    const cw = Math.round(sw / k), ch = Math.round(sh / k);
+    const sx = (vw - cw) >> 1, sy = (vh - ch) >> 1;
+    shot.width = cw; shot.height = ch;
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (S.facing === 'user') sctx.setTransform(-1, 0, 0, 1, cw, 0);
+    sctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+    // tiny thumbnail copy
+    const t = $('thumbCv'); t.width = 100; t.height = Math.round(100 * ch / cw);
+    t.getContext('2d').drawImage(shot, 0, 0, t.width, t.height);
+    $('thumb').classList.remove('empty');
   }
 
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function shoot() {
     if (S.busy || !video.videoWidth) return;
-    S.busy = true; $('#shutter').disabled = true;
-
+    S.busy = true;
     if (S.timer) {
-      const c = $('#count'); c.hidden = false;
-      for (let i = S.timer; i > 0; i--) { c.innerHTML = '<span>' + i + '</span>'; await wait(1000); }
+      const c = $('count'); c.hidden = false;
+      for (let i = S.timer; i > 0; i--) { c.textContent = i; await sleep(1000); }
       c.hidden = true;
     }
-
-    // Light up before the shot so the camera's exposure has time to adjust
-    if (S.mode === 2) { wash.classList.add('on'); await wait(500); }
-    else if (S.mode === 1) { applyRing(true); await wait(350); }
-
-    const canvas = grabFrame();
-
-    wash.classList.remove('on');
-    applyRing();
-    const b = $('#blink'); b.classList.remove('go'); void b.offsetWidth; b.classList.add('go');
-
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.93));
-    if (S.last) URL.revokeObjectURL(S.last.url);
-    S.last = { blob, url: URL.createObjectURL(blob) };
-    $('#thumbImg').src = S.last.url;
-    $('#thumb').hidden = false;
-    openPreview();
-
-    S.busy = false; $('#shutter').disabled = false;
+    grabFrame();
+    const sh = $('shutter'); sh.classList.add('snap'); setTimeout(() => sh.classList.remove('snap'), 120);
+    S.shot = null; // blob is encoded lazily on Save
+    $('preview').hidden = false;
+    S.busy = false;
   }
-  $('#shutter').addEventListener('click', shoot);
+  $('shutter').addEventListener('click', shoot);
   document.addEventListener('keydown', e => {
-    if ((e.key === ' ' || e.key === 'Enter') && $('#preview').hidden && document.activeElement === document.body) { e.preventDefault(); shoot(); }
-    if (e.key === 'Escape' && !$('#preview').hidden) closePreview();
+    if ((e.key === ' ' || e.key === 'Enter') && $('preview').hidden && document.activeElement === document.body) { e.preventDefault(); shoot(); }
+    if (e.key === 'Escape') $('preview').hidden = true;
   });
+  $('thumb').addEventListener('click', () => { if (shot.width) $('preview').hidden = false; });
+  $('retake').addEventListener('click', () => { $('preview').hidden = true; });
 
-  function openPreview() { if (!S.last) return; $('#shot').src = S.last.url; $('#preview').hidden = false; }
-  function closePreview() { $('#preview').hidden = true; }
-  $('#thumb').addEventListener('click', openPreview);
-  $('#retake').addEventListener('click', closePreview);
-
-  $('#save').addEventListener('click', async () => {
-    if (!S.last) return;
-    const d = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const name = `glow-selfie-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.jpg`;
-    const file = new File([S.last.blob], name, { type: 'image/jpeg' });
-    // On phones, the share sheet has "Save Image" / "Save to Photos"
+  $('save').addEventListener('click', async () => {
+    if (!shot.width) return;
+    if (!S.shot) S.shot = await new Promise(r => shot.toBlob(r, 'image/jpeg', 0.93));
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    const name = `glow-selfie-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`;
+    const file = new File([S.shot], name, { type: 'image/jpeg' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file] }); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
-    const a = document.createElement('a');
-    a.href = S.last.url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
+    const url = URL.createObjectURL(S.shot), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
     toast('Saved to your downloads');
   });
 
-  addEventListener('resize', () => applyRing());
+  addEventListener('resize', () => { queueGlow(); renderSlider(); });
 
-  renderUI();
-  startCamera().then(() => {
-    if ($('#panel').hidden) setTimeout(() => toast('Tip: set screen brightness to max', 2600), 600);
-  });
+  renderUI(); drawGlow();
+  startCamera().then(() => { if ($('panel').hidden) setTimeout(() => toast('Tip: set screen brightness to max', 2400), 500); });
 })();
 </script>
 </body>
