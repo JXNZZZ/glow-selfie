@@ -25,7 +25,7 @@
   video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
   video.mirror{transform:scaleX(-1)}
 
-  /* Edge light: a small pre-rendered gradient, scaled up by the GPU. Nothing is re-drawn per camera frame. */
+  /* My edge light. It's a small gradient I draw once and let the GPU stretch, so nothing gets redrawn on every camera frame (that's what made my first version lag). */
   #glow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;will-change:opacity;transition:opacity .2s linear}
   #glow.off{opacity:0}
 
@@ -134,6 +134,8 @@
 </div>
 
 <script>
+// Glow Selfie by Jackuson
+// I wanted a Snapchat-style front light for taking selfies in the dark, so I made my own.
 (() => {
   const $ = s => document.getElementById(s);
   const video = $('cam'), glow = $('glow'), gctx = glow.getContext('2d');
@@ -160,9 +162,9 @@
   }
 
   /* ---------- Edge light ----------
-     Rendered at 1/4 screen resolution into a canvas, then stretched by the GPU.
-     The gradient is smooth, so the upscale is invisible, and it only redraws
-     when you change brightness, colour or rotate the phone. */
+     I render this at 1/4 of the screen resolution and let the GPU stretch it.
+     The gradient is so smooth that you can't tell, and I only redraw it when
+     I change the brightness or colour, or turn the phone. */
   const SCALE = 0.25;
   let img = null, gw = 0, gh = 0;
   function drawGlow() {
@@ -171,21 +173,21 @@
     if (w !== gw || h !== gh) { gw = glow.width = w; gh = glow.height = h; img = gctx.createImageData(w, h); }
     const d = img.data, [r, g, b] = TONES[S.tone].rgb;
     const l = S.level, m = Math.min(w, h);
-    const reach = m * (0.10 + 0.42 * l);     // how far the light spreads inward
-    const solid = reach * (0.18 + 0.22 * l); // fully bright band at the very edge
+    const reach = m * (0.10 + 0.42 * l);     // how far I want the light to reach in from the edges
+    const solid = reach * (0.18 + 0.22 * l); // the fully bright strip right at the edge
     const fade = reach - solid;
     const peak = 255 * (0.55 + 0.45 * l);
-    // falloff for a given distance from one edge
+    // how bright the light is at a given distance from one edge
     const fall = dist => {
       if (dist <= solid) return 1;
       if (dist >= reach) return 0;
       const t = 1 - (dist - solid) / fade; return t * t * (3 - 2 * t);
     };
-    // precompute per-column and per-row "darkness" (1 - light from left+right / top+bottom)
+    // I work out the rows and columns once first so the pixel loop stays cheap
     const colK = new Float32Array(w), rowK = new Float32Array(h);
     for (let x = 0; x < w; x++) colK[x] = (1 - fall(x + 0.5)) * (1 - fall(w - x - 0.5));
     for (let y = 0; y < h; y++) rowK[y] = (1 - fall(y + 0.5)) * (1 - fall(h - y - 0.5));
-    // light from all four edges combined like overlapping lamps: no seams, soft corners
+    // I blend all four edges like overlapping lamps. That got rid of the ugly diagonal seams I had in the corners.
     let i = 0;
     for (let y = 0; y < h; y++) {
       const rk = rowK[y];
@@ -215,7 +217,8 @@
     renderSlider();
   }
 
-  /* ---------- Brightness slider (transform-only updates) ---------- */
+  /* ---------- Brightness slider ----------
+     I only move things with transforms here so dragging stays smooth. */
   const slider = $('slider'), track = $('track');
   let trackH = 0, trackTop = 0;
   function renderSlider() {
@@ -243,7 +246,7 @@
     e.preventDefault(); setLevel(S.level + step); persist();
   });
 
-  /* ---------- Tools ---------- */
+  /* ---------- Buttons ---------- */
   $('lightBtn').addEventListener('click', () => { S.on = !S.on; renderUI(); persist(); toast(S.on ? 'Edge light on' : 'Edge light off'); });
   $('toneBtn').addEventListener('click', () => { S.tone = (S.tone + 1) % TONES.length; renderUI(); queueGlow(); persist(); toast(TONES[S.tone].name); });
   $('timerBtn').addEventListener('click', () => {
@@ -289,23 +292,24 @@
   }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      // release the camera in the background to save battery
+      // I let go of the camera when the app's in the background so it doesn't drain my battery
       if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
     } else { startCamera(); }
   });
 
-  /* ---------- Capture: instant, no light change ---------- */
+  /* ---------- Taking the photo ----------
+     This is instant and I don't touch the light, so the photo is lit exactly how it looks on screen. */
   const shot = $('shot'), sctx = shot.getContext('2d');
   function grabFrame() {
     const vw = video.videoWidth, vh = video.videoHeight, sw = innerWidth, sh = innerHeight;
-    const k = Math.max(sw / vw, sh / vh);               // crop to what's on screen
+    const k = Math.max(sw / vw, sh / vh);               // I crop to exactly what's on screen
     const cw = Math.round(sw / k), ch = Math.round(sh / k);
     const sx = (vw - cw) >> 1, sy = (vh - ch) >> 1;
     shot.width = cw; shot.height = ch;
     sctx.setTransform(1, 0, 0, 1, 0, 0);
     if (S.facing === 'user') sctx.setTransform(-1, 0, 0, 1, cw, 0);
     sctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
-    // tiny thumbnail copy
+    // I keep a tiny copy for the thumbnail button
     const t = $('thumbCv'); t.width = 100; t.height = Math.round(100 * ch / cw);
     t.getContext('2d').drawImage(shot, 0, 0, t.width, t.height);
     $('thumb').classList.remove('empty');
@@ -322,7 +326,7 @@
     }
     grabFrame();
     const sh = $('shutter'); sh.classList.add('snap'); setTimeout(() => sh.classList.remove('snap'), 120);
-    S.shot = null; // blob is encoded lazily on Save
+    S.shot = null; // I only turn it into a JPEG when I hit Save
     $('preview').hidden = false;
     S.busy = false;
   }
