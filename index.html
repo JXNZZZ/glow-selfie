@@ -298,24 +298,92 @@
   });
 
   /* ---------- Taking the photo ----------
-     This is instant and I don't touch the light, so the photo is lit exactly how it looks on screen. */
+     I never touch the light when I shoot, so the photo is lit exactly how it looks on screen.
+     I try three ways to get the sharpest photo, best first:
+       1. Android Chrome: a real full-resolution photo from the camera (ImageCapture)
+       2. iPhone Safari: I bump the camera up to its highest resolution for a split second and grab that frame
+       3. Anything else: a frame from the normal 1080p preview */
   const shot = $('shot'), sctx = shot.getContext('2d');
-  function grabFrame() {
-    const vw = video.videoWidth, vh = video.videoHeight, sw = innerWidth, sh = innerHeight;
-    const k = Math.max(sw / vw, sh / vh);               // I crop to exactly what's on screen
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const timeout = (p, ms) => Promise.race([p, sleep(ms).then(() => { throw new Error('timeout'); })]);
+  const isPortrait = (w, h) => h >= w;
+  const videoTrack = () => S.stream && S.stream.getVideoTracks()[0];
+
+  // I crop whatever I got to the shape of my screen, mirror it for selfies, and draw it into the preview
+  function drawShot(src, w, h) {
+    const sw = innerWidth, sh = innerHeight;
+    const k = Math.max(sw / w, sh / h);
     const cw = Math.round(sw / k), ch = Math.round(sh / k);
-    const sx = (vw - cw) >> 1, sy = (vh - ch) >> 1;
+    const sx = (w - cw) >> 1, sy = (h - ch) >> 1;
     shot.width = cw; shot.height = ch;
     sctx.setTransform(1, 0, 0, 1, 0, 0);
     if (S.facing === 'user') sctx.setTransform(-1, 0, 0, 1, cw, 0);
-    sctx.drawImage(video, sx, sy, cw, ch, 0, 0, cw, ch);
+    sctx.drawImage(src, sx, sy, cw, ch, 0, 0, cw, ch);
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
     // I keep a tiny copy for the thumbnail button
     const t = $('thumbCv'); t.width = 100; t.height = Math.round(100 * ch / cw);
     t.getContext('2d').drawImage(shot, 0, 0, t.width, t.height);
     $('thumb').classList.remove('empty');
   }
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // 1. Android: ask the camera for a proper still photo at its max resolution
+  let imageCapture = null, imageCaptureTrack = null;
+  async function fullResPhoto(track) {
+    if (!('ImageCapture' in window)) return false;
+    if (imageCaptureTrack !== track) { imageCapture = new ImageCapture(track); imageCaptureTrack = track; }
+    const caps = await timeout(imageCapture.getPhotoCapabilities(), 1500);
+    const settings = {};
+    if (caps.imageWidth && caps.imageWidth.max) settings.imageWidth = caps.imageWidth.max;
+    if (caps.imageHeight && caps.imageHeight.max) settings.imageHeight = caps.imageHeight.max;
+    if (caps.fillLightMode && caps.fillLightMode.includes('off')) settings.fillLightMode = 'off'; // no flash, ever
+    const blob = await timeout(imageCapture.takePhoto(settings), 4000);
+    const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+    // if the photo comes back rotated differently to the preview, I don't trust it and fall back
+    if (isPortrait(bmp.width, bmp.height) !== isPortrait(video.videoWidth, video.videoHeight)) { bmp.close(); return false; }
+    drawShot(bmp, bmp.width, bmp.height);
+    bmp.close();
+    return true;
+  }
+
+  // 2. iPhone: Safari has no ImageCapture, so I switch the stream to max resolution just for the shot
+  const nextVideoFrame = () => new Promise(r => {
+    if (video.requestVideoFrameCallback) { video.requestVideoFrameCallback(() => r()); setTimeout(r, 300); }
+    else setTimeout(r, 120);
+  });
+  async function hiResFrame(track) {
+    if (!track.getCapabilities) return false;
+    const caps = track.getCapabilities(), cur = track.getSettings();
+    if (!caps.width || !caps.height || !caps.width.max || !caps.height.max) return false;
+    const big = Math.max(caps.width.max, caps.height.max), small = Math.min(caps.width.max, caps.height.max);
+    if (big <= Math.max(cur.width || 0, cur.height || 0)) return false; // already at max
+    const before = video.videoWidth * video.videoHeight;
+    let ok = false;
+    try {
+      await timeout(track.applyConstraints({ width: { ideal: big }, height: { ideal: small } }), 2000);
+      // I wait until the bigger frames are actually showing up
+      const t0 = performance.now();
+      while (video.videoWidth * video.videoHeight <= before && performance.now() - t0 < 1500) await sleep(40);
+      if (video.videoWidth * video.videoHeight > before) {
+        await nextVideoFrame();
+        drawShot(video, video.videoWidth, video.videoHeight);
+        ok = true;
+      }
+    } catch (e) {}
+    // back to the lighter 1080p preview so it doesn't lag
+    track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } }).catch(() => {});
+    return ok;
+  }
+
+  async function capture() {
+    const track = videoTrack();
+    if (track) {
+      try { if (await fullResPhoto(track)) return 'photo'; } catch (e) {}
+      try { if (await hiResFrame(track)) return 'hires'; } catch (e) {}
+    }
+    drawShot(video, video.videoWidth, video.videoHeight); // 3. plain preview frame
+    return 'preview';
+  }
+
   async function shoot() {
     if (S.busy || !video.videoWidth) return;
     S.busy = true;
@@ -324,8 +392,8 @@
       for (let i = S.timer; i > 0; i--) { c.textContent = i; await sleep(1000); }
       c.hidden = true;
     }
-    grabFrame();
     const sh = $('shutter'); sh.classList.add('snap'); setTimeout(() => sh.classList.remove('snap'), 120);
+    await capture();
     S.shot = null; // I only turn it into a JPEG when I hit Save
     $('preview').hidden = false;
     S.busy = false;
